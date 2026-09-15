@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: dismas-scriptorium
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATA_FILE
+        value: /opt/render/project/src/data/chat.json
