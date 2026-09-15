@@ -15,8 +15,12 @@ const PORT = process.env.PORT || 3000;
 const PASSWORD_HASH = process.env.DISMAS_PASSWORD_HASH || "";
 const TOTP_SECRET = process.env.DISMAS_TOTP_SECRET || "";
 const SESSION_SECRET = process.env.DISMAS_SESSION_SECRET || "dismas-scriptorium-" + Math.random();
-const MCP_API_KEY = process.env.DISMAS_MCP_KEY || ""; // optional: protect MCP endpoints
-const USE_SSE = !!process.env.PORT; // cloud = SSE, local = stdio
+const MCP_API_KEY = process.env.DISMAS_MCP_KEY || "";
+const USE_SSE = !!process.env.PORT;
+
+// Track MCP status for debugging
+let mcpStatus = "initializing";
+let mcpError = "";
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -86,9 +90,8 @@ function requireAuth(req, res, next) {
   res.redirect("/login");
 }
 
-// Optional API-key guard for MCP endpoints
 function requireMcpKey(req, res, next) {
-  if (!MCP_API_KEY) return next(); // no key configured = open
+  if (!MCP_API_KEY) return next();
   const key = req.headers["x-api-key"] || req.query.key;
   if (key === MCP_API_KEY) return next();
   return res.status(403).json({ error: "Forbidden" });
@@ -150,15 +153,21 @@ app.post("/api/dismas", requireAuth, (req, res) => {
 });
 app.get("/api/unsynced", requireAuth, (req, res) => res.json(getUnsyncedMessages()));
 app.post("/api/mark-synced", requireAuth, (req, res) => { markSynced(req.body.upToId); res.json({ success: true }); });
-app.get("/api/health", (req, res) => res.json({ status: "alive", patron: "St. Dismas", storage: "sqlite", mcp: true, transport: USE_SSE ? "sse" : "stdio" }));
 
-// === MCP SERVER ===
-// Build the MCP server with tool handlers (shared between SSE and stdio)
-function buildMcpServer() {
-  const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
-  const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
+// Health endpoint includes MCP status for debugging
+app.get("/api/health", (req, res) => res.json({
+  status: "alive", patron: "St. Dismas", storage: "sqlite",
+  mcp: mcpStatus, transport: USE_SSE ? "sse" : "stdio",
+  mcpError: mcpError || undefined
+}));
 
-  const mcpServer = new Server({ name: "dismas-mcp", version: "3.1.0" }, { capabilities: { tools: {} } });
+// === MCP SERVER (async setup using dynamic import for ESM SDK) ===
+async function setupMcp() {
+  // Dynamic import - works with both ESM and CJS packages
+  const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
+
+  const mcpServer = new Server({ name: "dismas-mcp", version: "3.1.1" }, { capabilities: { tools: {} } });
 
   mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -204,46 +213,57 @@ function buildMcpServer() {
     }
   });
 
-  return mcpServer;
-}
-
-// Register MCP transport BEFORE static middleware and listen
-try {
-  const mcpServer = buildMcpServer();
-
   if (USE_SSE) {
-    // Cloud (Railway/Render): expose MCP over SSE so remote clients can connect
-    const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+    // Cloud: SSE transport for remote MCP clients
+    const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
     const transports = {};
 
     app.get("/sse", requireMcpKey, async (req, res) => {
-      const transport = new SSEServerTransport("/messages", res);
-      transports[transport.sessionId] = transport;
-      res.on("close", () => { delete transports[transport.sessionId]; });
-      await mcpServer.connect(transport);
-    });
-
-    app.post("/messages", requireMcpKey, async (req, res) => {
-      const sessionId = req.query.sessionId;
-      const transport = transports[sessionId];
-      if (transport) {
-        await transport.handlePostMessage(req, res);
-      } else {
-        res.status(400).json({ error: "No session found" });
+      try {
+        const transport = new SSEServerTransport("/messages", res);
+        transports[transport.sessionId] = transport;
+        res.on("close", () => { delete transports[transport.sessionId]; });
+        await mcpServer.connect(transport);
+      } catch (e) {
+        console.error("SSE connection error:", e.message);
+        if (!res.headersSent) res.status(500).json({ error: "MCP connection failed" });
       }
     });
 
+    app.post("/messages", requireMcpKey, async (req, res) => {
+      try {
+        const sessionId = req.query.sessionId;
+        const transport = transports[sessionId];
+        if (transport) {
+          await transport.handlePostMessage(req, res);
+        } else {
+          res.status(400).json({ error: "No session found" });
+        }
+      } catch (e) {
+        console.error("MCP message error:", e.message);
+        if (!res.headersSent) res.status(500).json({ error: "Message handling failed" });
+      }
+    });
+
+    mcpStatus = "active";
     console.error("Dismas MCP: SSE transport ready at /sse");
   } else {
-    // Local: stdio transport for CLI/Claude Desktop
-    const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+    // Local: stdio transport
+    const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
     const transport = new StdioServerTransport();
-    mcpServer.connect(transport).then(() => console.error("Dismas MCP: stdio transport started")).catch(e => console.error("MCP error:", e));
+    await mcpServer.connect(transport);
+    mcpStatus = "active";
+    console.error("Dismas MCP: stdio transport started");
   }
-} catch (e) {
-  console.error("MCP server not started:", e.message);
-  console.error("Running as HTTP-only (web deploy mode)");
 }
+
+// Start MCP setup asynchronously (routes register after imports resolve)
+setupMcp().catch(e => {
+  mcpStatus = "failed";
+  mcpError = e.message;
+  console.error("MCP setup failed:", e.message);
+  console.error("Running as HTTP-only (web deploy mode)");
+});
 
 // Static files + start server
 app.use(express.static(path.join(__dirname, "..", "public")));
