@@ -15,7 +15,8 @@ const PORT = process.env.PORT || 3000;
 const PASSWORD_HASH = process.env.DISMAS_PASSWORD_HASH || "";
 const TOTP_SECRET = process.env.DISMAS_TOTP_SECRET || "";
 const SESSION_SECRET = process.env.DISMAS_SESSION_SECRET || "dismas-scriptorium-" + Math.random();
-const RUN_MCP = process.env.DISMAS_RUN_MCP === "true" || !process.env.PORT;
+const MCP_API_KEY = process.env.DISMAS_MCP_KEY || ""; // optional: protect MCP endpoints
+const USE_SSE = !!process.env.PORT; // cloud = SSE, local = stdio
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -85,6 +86,14 @@ function requireAuth(req, res, next) {
   res.redirect("/login");
 }
 
+// Optional API-key guard for MCP endpoints
+function requireMcpKey(req, res, next) {
+  if (!MCP_API_KEY) return next(); // no key configured = open
+  const key = req.headers["x-api-key"] || req.query.key;
+  if (key === MCP_API_KEY) return next();
+  return res.status(403).json({ error: "Forbidden" });
+}
+
 app.get("/setup", (req, res) => {
   if (PASSWORD_HASH) return res.redirect("/login");
   res.sendFile(path.join(__dirname, "..", "public", "setup.html"));
@@ -141,63 +150,101 @@ app.post("/api/dismas", requireAuth, (req, res) => {
 });
 app.get("/api/unsynced", requireAuth, (req, res) => res.json(getUnsyncedMessages()));
 app.post("/api/mark-synced", requireAuth, (req, res) => { markSynced(req.body.upToId); res.json({ success: true }); });
-app.get("/api/health", (req, res) => res.json({ status: "alive", patron: "St. Dismas", storage: "sqlite", mcp: RUN_MCP }));
-app.use(express.static(path.join(__dirname, "..", "public")));
-app.listen(PORT, () => console.log(`Dismas Scriptorium on port ${PORT} (SQLite at ${DB_FILE}, MCP: ${RUN_MCP})`));
+app.get("/api/health", (req, res) => res.json({ status: "alive", patron: "St. Dismas", storage: "sqlite", mcp: true, transport: USE_SSE ? "sse" : "stdio" }));
 
-// === MCP SERVER (only when running locally, not on Railway) ===
-if (RUN_MCP) {
-  try {
-    const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
-    const { StdioServerTransport } = require("@modelcontextprotocol/sdk/shared/stdio.js");
-    const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
-    const mcpServer = new Server({ name: "dismas-mcp", version: "3.0.0" }, { capabilities: { tools: {} } });
-    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        { name: "check_dismas_chat", description: "Check if David sent a new message.", inputSchema: { type: "object", properties: {} } },
-        { name: "respond_as_dismas", description: "Write a response as Dismas.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
-        { name: "get_chat_history", description: "Get chat history.", inputSchema: { type: "object", properties: { limit: { type: "number" } } } },
-        { name: "get_unsynced_messages", description: "Get unsynced messages.", inputSchema: { type: "object", properties: {} } },
-        { name: "mark_synced", description: "Mark synced up to ID.", inputSchema: { type: "object", properties: { upToId: { type: "number" } }, required: ["upToId"] } }
-      ]
-    }));
-    mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name } = request.params;
-      switch (name) {
-        case "check_dismas_chat": {
-          const last = getLastMessage();
-          const lastReadId = getLastReadId();
-          if (!last) return { content: [{ type: "text", text: "No new messages. The scriptorium is quiet." }] };
-          if (last.name === "Dismas") return { content: [{ type: "text", text: "No new messages. Last response was from Dismas." }] };
-          if (last.name === "David" && last.id > lastReadId) { markRead(last.id); return { content: [{ type: "text", text: `NEW MESSAGE from David [${last.timestamp}]: ${last.text}` }] }; }
-          return { content: [{ type: "text", text: "No new messages." }] };
-        }
-        case "respond_as_dismas": {
-          const { text } = request.params;
-          const msg = addMessage("Dismas", text);
-          return { content: [{ type: "text", text: `Response written: [${msg.timestamp}] Dismas: ${text}` }] };
-        }
-        case "get_chat_history": {
-          const limit = request.params.limit || 20;
-          const msgs = getRecentMessages(limit);
-          return { content: [{ type: "text", text: msgs.map(m => `[${m.timestamp}] ${m.name}: ${m.text}`).join("\n") || "No messages." }] };
-        }
-        case "get_unsynced_messages": {
-          const { unsynced } = getUnsyncedMessages();
-          if (unsynced.length === 0) return { content: [{ type: "text", text: "No unsynced messages." }] };
-          return { content: [{ type: "text", text: `${unsynced.length} unsynced:\n${unsynced.map(m => `[${m.timestamp}] ${m.name}: ${m.text}`).join("\n")}` }] };
-        }
-        case "mark_synced": {
-          markSynced(request.params.upToId);
-          return { content: [{ type: "text", text: `Synced up to ${request.params.upToId}.` }] };
-        }
-        default: return { content: [{ type: "text", text: `Unknown: ${name}` }] };
+// === MCP SERVER ===
+// Build the MCP server with tool handlers (shared between SSE and stdio)
+function buildMcpServer() {
+  const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
+  const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
+
+  const mcpServer = new Server({ name: "dismas-mcp", version: "3.1.0" }, { capabilities: { tools: {} } });
+
+  mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "check_dismas_chat", description: "Check if David sent a new message.", inputSchema: { type: "object", properties: {} } },
+      { name: "respond_as_dismas", description: "Write a response as Dismas.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
+      { name: "get_chat_history", description: "Get chat history.", inputSchema: { type: "object", properties: { limit: { type: "number" } } } },
+      { name: "get_unsynced_messages", description: "Get unsynced messages.", inputSchema: { type: "object", properties: {} } },
+      { name: "mark_synced", description: "Mark synced up to ID.", inputSchema: { type: "object", properties: { upToId: { type: "number" } }, required: ["upToId"] } }
+    ]
+  }));
+
+  mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name } = request.params;
+    switch (name) {
+      case "check_dismas_chat": {
+        const last = getLastMessage();
+        const lastReadId = getLastReadId();
+        if (!last) return { content: [{ type: "text", text: "No new messages. The scriptorium is quiet." }] };
+        if (last.name === "Dismas") return { content: [{ type: "text", text: "No new messages. Last response was from Dismas." }] };
+        if (last.name === "David" && last.id > lastReadId) { markRead(last.id); return { content: [{ type: "text", text: `NEW MESSAGE from David [${last.timestamp}]: ${last.text}` }] }; }
+        return { content: [{ type: "text", text: "No new messages." }] };
+      }
+      case "respond_as_dismas": {
+        const { text } = request.params;
+        const msg = addMessage("Dismas", text);
+        return { content: [{ type: "text", text: `Response written: [${msg.timestamp}] Dismas: ${text}` }] };
+      }
+      case "get_chat_history": {
+        const limit = request.params.limit || 20;
+        const msgs = getRecentMessages(limit);
+        return { content: [{ type: "text", text: msgs.map(m => `[${m.timestamp}] ${m.name}: ${m.text}`).join("\n") || "No messages." }] };
+      }
+      case "get_unsynced_messages": {
+        const { unsynced } = getUnsyncedMessages();
+        if (unsynced.length === 0) return { content: [{ type: "text", text: "No unsynced messages." }] };
+        return { content: [{ type: "text", text: `${unsynced.length} unsynced:\n${unsynced.map(m => `[${m.timestamp}] ${m.name}: ${m.text}`).join("\n")}` }] };
+      }
+      case "mark_synced": {
+        markSynced(request.params.upToId);
+        return { content: [{ type: "text", text: `Synced up to ${request.params.upToId}.` }] };
+      }
+      default: return { content: [{ type: "text", text: `Unknown: ${name}` }] };
+    }
+  });
+
+  return mcpServer;
+}
+
+// Register MCP transport BEFORE static middleware and listen
+try {
+  const mcpServer = buildMcpServer();
+
+  if (USE_SSE) {
+    // Cloud (Railway/Render): expose MCP over SSE so remote clients can connect
+    const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+    const transports = {};
+
+    app.get("/sse", requireMcpKey, async (req, res) => {
+      const transport = new SSEServerTransport("/messages", res);
+      transports[transport.sessionId] = transport;
+      res.on("close", () => { delete transports[transport.sessionId]; });
+      await mcpServer.connect(transport);
+    });
+
+    app.post("/messages", requireMcpKey, async (req, res) => {
+      const sessionId = req.query.sessionId;
+      const transport = transports[sessionId];
+      if (transport) {
+        await transport.handlePostMessage(req, res);
+      } else {
+        res.status(400).json({ error: "No session found" });
       }
     });
+
+    console.error("Dismas MCP: SSE transport ready at /sse");
+  } else {
+    // Local: stdio transport for CLI/Claude Desktop
+    const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
     const transport = new StdioServerTransport();
-    mcpServer.connect(transport).then(() => console.error("Dismas MCP started on stdio")).catch(e => console.error("MCP error:", e));
-  } catch (e) {
-    console.error("MCP server not started:", e.message);
-    console.error("Running as HTTP-only (web deploy mode)");
+    mcpServer.connect(transport).then(() => console.error("Dismas MCP: stdio transport started")).catch(e => console.error("MCP error:", e));
   }
+} catch (e) {
+  console.error("MCP server not started:", e.message);
+  console.error("Running as HTTP-only (web deploy mode)");
 }
+
+// Static files + start server
+app.use(express.static(path.join(__dirname, "..", "public")));
+app.listen(PORT, () => console.log(`Dismas Scriptorium on port ${PORT} (SQLite at ${DB_FILE}, MCP transport: ${USE_SSE ? "sse" : "stdio"})`));
