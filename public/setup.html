@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Scriptorium - First Vigil</title>
+<style>
+:root{--gold:#c4a04e;--gold-bright:#e0c068;--gold-dark:#8a7030;--parchment:#e8dcc4;--stone:#1a1612;--stone-light:#2a2218;--stone-mid:#3a3028;--text-warm:#d4c8b0;--text-faded:#8a7c64;--border-gold:rgba(196,160,78,0.3);--border-gold-strong:rgba(196,160,78,0.6)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--stone);background-image:radial-gradient(ellipse at 50% 20%,rgba(196,160,78,0.05) 0%,transparent 70%);color:var(--text-warm);font-family:Georgia,"Times New Roman",serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.setup-box{background:var(--stone-light);border:1px solid var(--border-gold);border-radius:6px;padding:36px;max-width:520px;width:100%;box-shadow:0 0 40px rgba(0,0,0,0.5),0 0 80px rgba(196,160,78,0.03)}
+.ornament{text-align:center;color:var(--gold);font-size:14px;letter-spacing:8px;margin-bottom:8px;opacity:0.5}
+h1{text-align:center;color:var(--gold-bright);font-size:1.25em;font-weight:700;letter-spacing:0.05em;margin-bottom:4px;text-shadow:0 0 20px rgba(196,160,78,0.15)}
+.sub{text-align:center;color:var(--text-faded);font-style:italic;font-size:0.8em;margin-bottom:24px}
+.step{margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border-gold)}
+.step:last-child{border-bottom:none}
+.step-num{color:var(--gold);font-size:0.75em;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px}
+.step h2{color:var(--parchment);font-size:1em;font-weight:600;margin-bottom:8px}
+.step p{color:var(--text-faded);font-size:0.85em;line-height:1.6;margin-bottom:12px}
+label{display:block;color:var(--gold);font-size:0.78em;font-weight:600;letter-spacing:0.03em;margin-bottom:6px}
+input{width:100%;background:var(--stone);border:1px solid var(--border-gold);border-radius:4px;color:var(--parchment);font-family:Georgia,serif;font-size:0.95em;padding:10px 14px;outline:none;transition:border-color 0.2s;margin-bottom:10px}
+input:focus{border-color:var(--border-gold-strong);box-shadow:0 0 12px rgba(196,160,78,0.08)}
+.btn{background:var(--stone-mid);border:1px solid var(--border-gold);border-radius:4px;color:var(--gold);font-family:Georgia,serif;font-size:0.85em;padding:10px 18px;cursor:pointer;letter-spacing:0.04em;transition:all 0.2s;width:100%}
+.btn:hover{background:var(--stone-light);color:var(--gold-bright);border-color:var(--border-gold-strong)}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.result{background:var(--stone);border:1px solid var(--border-gold);border-radius:4px;padding:12px;margin-top:10px;font-family:"Courier New",monospace;font-size:0.82em;color:var(--parchment);word-break:break-all;display:none}
+.result.visible{display:block}
+.result-label{color:var(--gold);font-size:0.78em;font-family:Georgia,serif;margin-bottom:4px}
+.copy-btn{background:transparent;border:1px solid var(--border-gold);border-radius:3px;color:var(--text-faded);font-size:0.75em;padding:4px 10px;cursor:pointer;margin-top:6px}
+.copy-btn:hover{color:var(--gold);border-color:var(--border-gold-strong)}
+.qr-container{text-align:center;margin-top:10px;display:none}
+.qr-container.visible{display:block}
+.qr-container img{border:1px solid var(--border-gold);border-radius:4px;padding:8px;background:#fff}
+.env-section{margin-top:20px;padding:14px;background:var(--stone);border:1px solid var(--border-gold);border-radius:4px}
+.env-section h3{color:var(--gold);font-size:0.8em;margin-bottom:8px}
+.env-line{font-family:"Courier New",monospace;font-size:0.8em;color:var(--parchment);margin-bottom:6px;word-break:break-all}
+.env-line .key{color:var(--gold)}
+.error{color:#c97070;font-size:0.82em;font-style:italic;margin-top:8px;min-height:1em}
+.candle{text-align:center;margin-top:20px;font-size:0.68em;color:var(--text-faded);opacity:0.4}
+.candle span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ffcc66;box-shadow:0 0 6px #ffcc66;margin-right:6px;animation:flicker 3s infinite ease-in-out}
+@keyframes flicker{0%,100%{opacity:0.7}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+<div class="setup-box">
+<div class="ornament">&#10086; &#10086; &#10086;</div>
+<h1>First Vigil</h1>
+<div class="sub">Set the word and the key. The scriptorium opens for the first time.</div>
+<div class="step">
+<div class="step-num">Step 1</div>
+<h2>The Word (Password)</h2>
+<p>Choose a password. It will be hashed and displayed for you to set as an environment variable in Railway.</p>
+<label for="pwd">Password (min 8 characters)</label>
+<input type="password" id="pwd" placeholder="Choose your password">
+<button class="btn" id="hashBtn" onclick="generateHash()">Generate Hash</button>
+<div class="result" id="hashResult">
+<div class="result-label">Copy this to Railway env var DISMAS_PASSWORD_HASH:</div>
+<div id="hashValue"></div>
+<button class="copy-btn" onclick="copyText('hashValue')">Copy</button>
+</div>
+<div class="error" id="hashError"></div>
+</div>
+<div class="step">
+<div class="step-num">Step 2</div>
+<h2>The Second Key (MFA)</h2>
+<p>Generate a TOTP secret and scan the QR code with Google Authenticator or similar.</p>
+<button class="btn" id="totpBtn" onclick="generateTOTP()">Generate MFA Secret</button>
+<div class="qr-container" id="qrContainer">
+<div class="result-label">Scan with Google Authenticator:</div>
+<img id="qrImg" src="" alt="QR Code">
+<div class="result-label" style="margin-top:10px">Copy this to Railway env var DISMAS_TOTP_SECRET:</div>
+<div id="totpValue"></div>
+<button class="copy-btn" onclick="copyText('totpValue')">Copy</button>
+</div>
+<div class="error" id="totpError"></div>
+</div>
+<div class="step">
+<div class="step-num">Step 3</div>
+<h2>Set Environment Variables in Railway</h2>
+<p>Go to Railway > your service > Variables and add these:</p>
+<div class="env-section">
+<h3>Required Env Vars</h3>
+<div class="env-line"><span class="key">DISMAS_PASSWORD_HASH=</span><span id="envHash">(from step 1)</span></div>
+<div class="env-line"><span class="key">DISMAS_TOTP_SECRET=</span><span id="envTotp">(from step 2)</span></div>
+<div class="env-line"><span class="key">DISMAS_SESSION_SECRET=</span>any-random-string</div>
+<div class="env-line"><span class="key">DATA_DIR=</span>/data</div>
+</div>
+<p style="margin-top:10px">Also add a Railway Volume mounted at <code style="color:var(--gold)">/data</code> for persistent storage.</p>
+<p style="margin-top:10px">After setting env vars, redeploy. Then visit the URL again - you'll get the login page instead of setup.</p>
+</div>
+<div class="candle"><span></span>The first candle is lit</div>
+</div>
+<script>
+const API = window.location.origin;
+async function generateHash() {
+  const pwd = document.getElementById("pwd").value;
+  const err = document.getElementById("hashError");
+  err.textContent = "";
+  if (!pwd || pwd.length < 8) { err.textContent = "Password must be at least 8 characters."; return; }
+  const btn = document.getElementById("hashBtn");
+  btn.disabled = true; btn.textContent = "Hashing...";
+  try {
+    const res = await fetch(`${API}/api/setup/hash`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pwd }) });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById("hashValue").textContent = data.hash;
+      document.getElementById("envHash").textContent = data.hash;
+      document.getElementById("hashResult").classList.add("visible");
+      btn.textContent = "Regenerate";
+    } else { err.textContent = data.error; }
+  } catch (e) { err.textContent = "Could not generate hash."; }
+  btn.disabled = false;
+}
+async function generateTOTP() {
+  const err = document.getElementById("totpError");
+  err.textContent = "";
+  const btn = document.getElementById("totpBtn");
+  btn.disabled = true; btn.textContent = "Generating...";
+  try {
+    const res = await fetch(`${API}/api/setup/totp`);
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById("qrImg").src = data.qr;
+      document.getElementById("totpValue").textContent = data.base32;
+      document.getElementById("envTotp").textContent = data.base32;
+      document.getElementById("qrContainer").classList.add("visible");
+      btn.textContent = "Regenerate";
+    } else { err.textContent = data.error; }
+  } catch (e) { err.textContent = "Could not generate TOTP."; }
+  btn.disabled = false;
+}
+function copyText(elementId) {
+  const text = document.getElementById(elementId).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = "Copied";
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+</script>
+</body>
+</html>
