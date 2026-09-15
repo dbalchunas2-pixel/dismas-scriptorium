@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Scriptorium - Enter</title>
+<style>
+:root{--gold:#c4a04e;--gold-bright:#e0c068;--gold-dark:#8a7030;--parchment:#e8dcc4;--stone:#1a1612;--stone-light:#2a2218;--stone-mid:#3a3028;--text-warm:#d4c8b0;--text-faded:#8a7c64;--border-gold:rgba(196,160,78,0.3);--border-gold-strong:rgba(196,160,78,0.6)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--stone);background-image:radial-gradient(ellipse at 50% 30%,rgba(196,160,78,0.06) 0%,transparent 70%);color:var(--text-warm);font-family:Georgia,"Times New Roman",serif;height:100vh;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--stone-light);border:1px solid var(--border-gold);border-radius:6px;padding:40px 36px;max-width:380px;width:90%;box-shadow:0 0 40px rgba(0,0,0,0.5),0 0 80px rgba(196,160,78,0.03)}
+.login-ornament{text-align:center;color:var(--gold);font-size:16px;letter-spacing:10px;margin-bottom:8px;opacity:0.5}
+.login-title{text-align:center;color:var(--gold-bright);font-size:1.3em;font-weight:700;letter-spacing:0.05em;margin-bottom:4px;text-shadow:0 0 20px rgba(196,160,78,0.15)}
+.login-sub{text-align:center;color:var(--text-faded);font-style:italic;font-size:0.8em;margin-bottom:28px}
+.field{margin-bottom:18px}
+.field-label{display:block;color:var(--gold);font-size:0.78em;font-weight:600;letter-spacing:0.04em;margin-bottom:6px}
+.field-input{width:100%;background:var(--stone);border:1px solid var(--border-gold);border-radius:4px;color:var(--parchment);font-family:Georgia,serif;font-size:0.95em;padding:10px 14px;outline:none;transition:border-color 0.2s}
+.field-input:focus{border-color:var(--border-gold-strong);box-shadow:0 0 12px rgba(196,160,78,0.08)}
+.field-input::placeholder{color:var(--text-faded);opacity:0.4}
+.login-btn{width:100%;background:var(--stone-mid);border:1px solid var(--border-gold);border-radius:4px;color:var(--gold);font-family:Georgia,serif;font-size:0.9em;padding:12px;cursor:pointer;letter-spacing:0.06em;transition:all 0.2s;margin-top:6px}
+.login-btn:hover{background:var(--stone-light);color:var(--gold-bright);border-color:var(--border-gold-strong)}
+.login-btn:disabled{opacity:0.4;cursor:not-allowed}
+.error-msg{color:#c97070;font-size:0.82em;text-align:center;margin-top:14px;font-style:italic;min-height:1.2em}
+.candle-mark{text-align:center;margin-top:24px;font-size:0.7em;color:var(--text-faded);opacity:0.4}
+.candle-mark span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ffcc66;box-shadow:0 0 6px #ffcc66;margin-right:6px;animation:flicker 3s infinite ease-in-out}
+@keyframes flicker{0%,100%{opacity:0.7}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+<div class="login-box">
+<div class="login-ornament">&#10086; &#10086; &#10086;</div>
+<div class="login-title">The Scriptorium</div>
+<div class="login-sub">Speak the word and turn the key</div>
+<form id="loginForm" onsubmit="return false;">
+<div class="field"><label class="field-label" for="password">The Word</label><input class="field-input" type="password" id="password" placeholder="Enter the password" autocomplete="current-password"></div>
+<div class="field" id="tokenField" style="display:none;"><label class="field-label" for="token">The Second Key</label><input class="field-input" type="text" id="token" placeholder="6-digit code from your authenticator" autocomplete="one-time-code" inputmode="numeric" maxlength="6"></div>
+<button class="login-btn" id="loginBtn" type="submit">Enter</button>
+</form>
+<div class="error-msg" id="errorMsg"></div>
+<div class="candle-mark"><span></span>The candle is lit for thee</div>
+</div>
+<script>
+const API=window.location.origin;
+const loginForm=document.getElementById("loginForm");
+const passwordInput=document.getElementById("password");
+const tokenInput=document.getElementById("token");
+const tokenField=document.getElementById("tokenField");
+const loginBtn=document.getElementById("loginBtn");
+const errorMsg=document.getElementById("errorMsg");
+passwordInput.focus();
+async function attemptLogin(){
+const password=passwordInput.value;
+const token=tokenInput.value.trim();
+if(!password)return;
+loginBtn.disabled=true;
+loginBtn.textContent="Knocking...";
+errorMsg.textContent="";
+try{
+const res=await fetch(`${API}/api/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password,token:token||undefined})});
+const data=await res.json();
+if(res.ok){loginBtn.textContent="The door opens...";window.location.href="/";}
+else{if(data.needsToken){tokenField.style.display="block";tokenInput.focus();errorMsg.textContent="";}else{errorMsg.textContent=data.error||"The door remains barred.";}loginBtn.disabled=false;loginBtn.textContent="Enter";}
+}catch(err){errorMsg.textContent="The scriptorium is silent. Try again.";loginBtn.disabled=false;loginBtn.textContent="Enter";}
+}
+loginForm.addEventListener("submit",attemptLogin);
+tokenInput.addEventListener("input",()=>{if(tokenInput.value.length===6)attemptLogin();});
+</script>
+</body>
+</html>
