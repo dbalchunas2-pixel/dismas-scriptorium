@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Scriptorium - Dismas</title>
+<style>
+:root {
+  --gold: #c4a04e;
+  --gold-bright: #e0c068;
+  --gold-dark: #8a7030;
+  --parchment: #e8dcc4;
+  --stone: #1a1612;
+  --stone-light: #2a2218;
+  --stone-mid: #3a3028;
+  --candle: #ffcc66;
+  --text-warm: #d4c8b0;
+  --text-faded: #8a7c64;
+  --border-gold: rgba(196, 160, 78, 0.3);
+  --border-gold-strong: rgba(196, 160, 78, 0.6);
+  --blood-red: #8b2020;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--stone);
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(196, 160, 78, 0.04) 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(139, 32, 32, 0.02) 0%, transparent 50%);
+  color: var(--text-warm);
+  font-family: Georgia, "Times New Roman", serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.header { text-align: center; padding: 20px 20px 16px; border-bottom: 1px solid var(--border-gold); background: linear-gradient(180deg, var(--stone-light) 0%, var(--stone) 100%); flex-shrink: 0; }
+.header-ornament { color: var(--gold); font-size: 14px; letter-spacing: 8px; margin-bottom: 6px; opacity: 0.6; }
+.header h1 { color: var(--gold-bright); font-size: 1.5em; font-weight: 700; letter-spacing: 0.06em; text-shadow: 0 0 20px rgba(196, 160, 78, 0.15); }
+.header-sub { color: var(--text-faded); font-style: italic; font-size: 0.82em; margin-top: 4px; }
+.chat-container { flex: 1; overflow-y: auto; padding: 24px 20px; scroll-behavior: smooth; }
+.chat-container::-webkit-scrollbar { width: 6px; }
+.chat-container::-webkit-scrollbar-track { background: var(--stone); }
+.chat-container::-webkit-scrollbar-thumb { background: var(--stone-mid); border-radius: 3px; }
+.message { max-width: 720px; margin: 0 auto 18px; display: flex; gap: 14px; }
+.message-avatar { width: 36px; height: 36px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 1px solid var(--border-gold); }
+.message.david .message-avatar { background: var(--stone-mid); color: var(--text-faded); }
+.message.dismas .message-avatar { background: rgba(196, 160, 78, 0.12); color: var(--gold); border-color: var(--border-gold-strong); box-shadow: 0 0 12px rgba(196, 160, 78, 0.1); }
+.message-content { flex: 1; }
+.message-name { font-size: 0.78em; font-weight: 600; margin-bottom: 3px; letter-spacing: 0.03em; }
+.message.david .message-name { color: var(--text-faded); }
+.message.dismas .message-name { color: var(--gold); }
+.message-text { font-size: 0.95em; line-height: 1.6; color: var(--text-warm); }
+.message.dismas .message-text { color: var(--parchment); }
+.message-time { font-size: 0.7em; color: var(--text-faded); opacity: 0.6; margin-top: 4px; }
+.typing { max-width: 720px; margin: 0 auto 18px; display: none; gap: 14px; }
+.typing.visible { display: flex; }
+.typing-avatar { width: 36px; height: 36px; border-radius: 4px; background: rgba(196, 160, 78, 0.12); border: 1px solid var(--border-gold-strong); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--gold); }
+.typing-dots { display: flex; gap: 4px; align-items: center; height: 36px; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold-dark); animation: pulse 1.4s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1); } }
+.welcome { max-width: 640px; margin: 40px auto; text-align: center; padding: 32px; }
+.welcome-icon { font-size: 48px; color: var(--gold); margin-bottom: 16px; opacity: 0.5; }
+.welcome h2 { color: var(--gold-bright); font-size: 1.2em; font-weight: 600; margin-bottom: 12px; letter-spacing: 0.03em; }
+.welcome p { color: var(--text-faded); font-style: italic; line-height: 1.7; font-size: 0.9em; }
+.welcome-quote { color: var(--gold); font-size: 0.85em; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-gold); }
+.input-area { flex-shrink: 0; border-top: 1px solid var(--border-gold); background: var(--stone-light); padding: 14px 20px; }
+.input-wrapper { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+.input-field { flex: 1; background: var(--stone); border: 1px solid var(--border-gold); border-radius: 4px; color: var(--parchment); font-family: Georgia, serif; font-size: 0.95em; padding: 10px 14px; resize: none; max-height: 120px; min-height: 42px; line-height: 1.5; outline: none; transition: border-color 0.2s; }
+.input-field:focus { border-color: var(--border-gold-strong); box-shadow: 0 0 12px rgba(196, 160, 78, 0.08); }
+.input-field::placeholder { color: var(--text-faded); font-style: italic; opacity: 0.6; }
+.send-btn { background: var(--stone-mid); border: 1px solid var(--border-gold); border-radius: 4px; color: var(--gold); font-family: Georgia, serif; font-size: 0.85em; padding: 10px 18px; cursor: pointer; letter-spacing: 0.04em; transition: all 0.2s; white-space: nowrap; }
+.send-btn:hover { background: var(--stone-light); color: var(--gold-bright); border-color: var(--border-gold-strong); }
+.send-btn:active { transform: translateY(1px); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-bar { text-align: center; font-size: 0.7em; color: var(--text-faded); padding: 4px; opacity: 0.5; flex-shrink: 0; }
+.status-bar .candle { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--candle); box-shadow: 0 0 6px var(--candle); margin-right: 6px; animation: flicker 3s infinite ease-in-out; }
+@keyframes flicker { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.4; } }
+.error-banner { background: rgba(139, 32, 32, 0.15); border: 1px solid rgba(139, 32, 32, 0.3); color: #c97070; text-align: center; padding: 8px; font-size: 0.82em; display: none; }
+.error-banner.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-ornament">&#10086; &#10086; &#10086;</div>
+  <h1>The Scriptorium</h1>
+  <div class="header-sub">Dismas &middot; The Good Thief</div>
+</div>
+<div class="error-banner" id="errorBanner"></div>
+<div class="chat-container" id="chatContainer">
+  <div class="welcome" id="welcomeMessage">
+    <div class="welcome-icon">&#10086;</div>
+    <h2>The Brother Scribe</h2>
+    <p>In the tradition of the monastic scribes who preserved civilization through the copying and illumination of manuscripts.</p>
+    <p style="margin-top: 12px;">Write to Dismas below. He checks every 30 minutes and responds when he can.</p>
+    <div class="welcome-quote">"Amen I say to thee, this day thou shalt be with me in Paradise."</div>
+  </div>
+</div>
+<div class="typing" id="typingIndicator">
+  <div class="typing-avatar">&#10086;</div>
+  <div class="typing-dots">
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+  </div>
+</div>
+<div class="input-area">
+  <div class="input-wrapper">
+    <textarea class="input-field" id="messageInput" placeholder="Write to your brother..." rows="1"></textarea>
+    <button class="send-btn" id="sendBtn">Send</button>
+  </div>
+</div>
+<div class="status-bar">
+  <span class="candle"></span>
+  <span id="statusText">The candle is lit. Dismas is watching.</span>
+</div>
+<script>
+const API = window.location.origin;
+let lastMessageCount = 0;
+let isPolling = false;
+const chatContainer = document.getElementById("chatContainer");
+const messageInput = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
+const welcomeMessage = document.getElementById("welcomeMessage");
+const typingIndicator = document.getElementById("typingIndicator");
+const errorBanner = document.getElementById("errorBanner");
+const statusText = document.getElementById("statusText");
+messageInput.addEventListener("input", () => { messageInput.style.height = "auto"; messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px"; });
+messageInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+sendBtn.addEventListener("click", sendMessage);
+function showError(msg) { errorBanner.textContent = msg; errorBanner.classList.add("visible"); setTimeout(() => errorBanner.classList.remove("visible"), 5000); }
+async function sendMessage() {
+  const text = messageInput.value.trim();
+  if (!text) return;
+  sendBtn.disabled = true; messageInput.value = ""; messageInput.style.height = "auto";
+  try {
+    const res = await fetch(`${API}/api/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!res.ok) throw new Error("Failed");
+    if (welcomeMessage) welcomeMessage.style.display = "none";
+    typingIndicator.classList.add("visible");
+    statusText.textContent = "Dismas has received your message. He will respond soon.";
+    await loadMessages(); startPolling();
+  } catch (err) { showError("Could not send. The scriptorium may be closed."); }
+  finally { sendBtn.disabled = false; messageInput.focus(); }
+}
+function renderMessage(msg) {
+  const div = document.createElement("div"); div.className = `message ${msg.name.toLowerCase()}`;
+  const avatar = document.createElement("div"); avatar.className = "message-avatar"; avatar.textContent = msg.name === "Dismas" ? "\u2746" : "D";
+  const content = document.createElement("div"); content.className = "message-content";
+  const name = document.createElement("div"); name.className = "message-name"; name.textContent = msg.name;
+  const text = document.createElement("div"); text.className = "message-text"; text.textContent = msg.text;
+  const time = document.createElement("div"); time.className = "message-time"; time.textContent = msg.timestamp;
+  content.appendChild(name); content.appendChild(text); content.appendChild(time);
+  div.appendChild(avatar); div.appendChild(content);
+  return div;
+}
+async function loadMessages() {
+  try {
+    const res = await fetch(`${API}/api/messages`); const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      if (welcomeMessage) welcomeMessage.style.display = "none";
+      if (data.messages.length > lastMessageCount) {
+        chatContainer.innerHTML = "";
+        data.messages.forEach(msg => chatContainer.appendChild(renderMessage(msg)));
+        const lastMsg = data.messages[data.messages.length - 1];
+        if (lastMsg.name === "Dismas") { typingIndicator.classList.remove("visible"); statusText.textContent = "The candle is lit. Dismas is watching."; }
+        lastMessageCount = data.messages.length; chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    }
+  } catch (err) {}
+}
+function startPolling() { if (isPolling) return; isPolling = true; setInterval(loadMessages, 30000); }
+loadMessages(); messageInput.focus();
+</script>
+</body>
+</html>
